@@ -5,78 +5,112 @@
  * Returns whether the freebuff CLI is installed, on PATH, and authenticated.
  */
 
-import { spawn } from "node:child_process";
-import { ADAPTER_TYPE, ADAPTER_VERSION, FREEBUFF_DEFAULT_COMMAND } from "../index.js";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import type {
+  AdapterEnvironmentTestContext,
+  AdapterEnvironmentTestResult,
+  AdapterEnvironmentCheck,
+} from "@paperclipai/adapter-utils";
 
-interface Diagnostics {
-  ok: boolean;
-  version?: string;
-  authenticated?: boolean;
-  models?: string[];
-  errors: string[];
-  hints: string[];
+import { ADAPTER_TYPE, FREEBUFF_DEFAULT_COMMAND } from "../index.js";
+
+const execFileAsync = promisify(execFile);
+
+type FreebuffTestConfig = {
+  command?: string;
+  args?: string[];
+};
+
+function asString(v: unknown, fallback: string): string {
+  return typeof v === "string" && v.length > 0 ? v : fallback;
 }
 
-function run(cmd: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
-  return new Promise((resolve) => {
-    const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
-    child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
-    child.on("error", (err) => resolve({ code: 127, stdout, stderr: stderr + `\n${err.message}` }));
-    child.on("close", (code) => resolve({ code: code ?? 0, stdout, stderr }));
-  });
+async function checkCliInstalled(command: string): Promise<AdapterEnvironmentCheck | null> {
+  try {
+    await execFileAsync(command, ["--version"], { timeout: 10_000 });
+    return null;
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException;
+    if (e.code === "ENOENT") {
+      return {
+        level: "error",
+        code: "freebuff_cli_not_found",
+        message: `freebuff CLI "${command}" not found on PATH`,
+        hint: "Install with: npm install -g freebuff",
+      };
+    }
+    return null;
+  }
+}
+
+async function checkCliVersion(command: string): Promise<AdapterEnvironmentCheck> {
+  try {
+    const { stdout } = await execFileAsync(command, ["--version"], {
+      timeout: 10_000,
+    });
+    const version = stdout.trim();
+    if (version) {
+      return {
+        level: "info",
+        code: "freebuff_version",
+        message: `freebuff version: ${version}`,
+      };
+    }
+    return {
+      level: "warn",
+      code: "freebuff_version_unknown",
+      message: "Could not determine freebuff version",
+    };
+  } catch {
+    return {
+      level: "warn",
+      code: "freebuff_version_unknown",
+      message: "Could not determine freebuff version",
+    };
+  }
+}
+
+async function checkAuthenticated(command: string): Promise<AdapterEnvironmentCheck> {
+  try {
+    await execFileAsync(command, ["whoami"], { timeout: 10_000 });
+    return {
+      level: "info",
+      code: "freebuff_authenticated",
+      message: "freebuff is authenticated",
+    };
+  } catch {
+    return {
+      level: "error",
+      code: "freebuff_not_authenticated",
+      message: "freebuff is not authenticated",
+      hint: "Run `freebuff login` on the host to authenticate",
+    };
+  }
 }
 
 export async function testEnvironment(
-  config: { command?: string } = {},
-): Promise<Diagnostics> {
-  const out: Diagnostics = { ok: false, errors: [], hints: [] };
-  const command = config.command ?? FREEBUFF_DEFAULT_COMMAND;
+  ctx: AdapterEnvironmentTestContext,
+): Promise<AdapterEnvironmentTestResult> {
+  const cfg = (ctx.config ?? {}) as FreebuffTestConfig;
+  const command = asString(cfg.command, FREEBUFF_DEFAULT_COMMAND);
+  const checks: AdapterEnvironmentCheck[] = [];
+  const testedAt = new Date().toISOString();
 
-  const which = await run("which", [command]);
-  if (which.code !== 0) {
-    out.errors.push(`freebuff binary not found on PATH (looked for "${command}")`);
-    out.hints.push("Install with: npm install -g freebuff");
-    return out;
+  const installedError = await checkCliInstalled(command);
+  if (installedError) {
+    checks.push(installedError);
+    return { adapterType: ADAPTER_TYPE, status: "fail", checks, testedAt };
   }
 
-  const version = await run(command, ["--version"]);
-  if (version.code === 0) {
-    out.version = version.stdout.trim() || version.stderr.trim();
-  } else {
-    out.errors.push(`freebuff --version failed: ${version.stderr.trim()}`);
-    return out;
-  }
+  checks.push(await checkCliVersion(command));
+  checks.push(await checkAuthenticated(command));
 
-  const whoami = await run(command, ["whoami"]);
-  if (whoami.code === 0) {
-    out.authenticated = true;
-  } else {
-    out.authenticated = false;
-    out.errors.push("freebuff not authenticated");
-    out.hints.push("Run `freebuff login` on the host to authenticate");
-  }
+  const status = checks.some((c) => c.level === "error")
+    ? "fail"
+    : checks.some((c) => c.level === "warn")
+      ? "warn"
+      : "pass";
 
-  const models = await run(command, ["models", "--json"]);
-  if (models.code === 0) {
-    try {
-      const parsed = JSON.parse(models.stdout) as unknown;
-      if (Array.isArray(parsed)) {
-        out.models = parsed.filter((m): m is string => typeof m === "string");
-      } else if (parsed && typeof parsed === "object" && "models" in parsed) {
-        const m = (parsed as { models: unknown }).models;
-        if (Array.isArray(m)) out.models = m.filter((x): x is string => typeof x === "string");
-      }
-    } catch {
-      // freebuff may not support --json; leave models undefined
-    }
-  }
-
-  out.ok = out.authenticated === true && out.errors.length === 0;
-  return out;
+  return { adapterType: ADAPTER_TYPE, status, checks, testedAt };
 }
-
-export const adapterType = ADAPTER_TYPE;
-export const adapterVersion = ADAPTER_VERSION;

@@ -48,6 +48,7 @@ export interface FreebuffConfig {
   graceSec?: number;
   env?: Record<string, string>;
   stripAds?: boolean;
+  promptTemplate?: string;
 }
 
 export const agentConfigurationDoc = `

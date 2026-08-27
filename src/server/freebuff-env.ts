@@ -10,13 +10,13 @@ import { buildPaperclipEnv } from "@paperclipai/adapter-utils/server-utils";
 import type { FreebuffConfig } from "../index.js";
 
 export function buildFreebuffEnv(
-  agent: { id: string; name?: string | null } | null | undefined,
+  agent: { id: string; companyId: string; name?: string | null },
   config: Pick<FreebuffConfig, "env" | "model">,
   paperclipRunId: string,
   paperclipApiKey: string | null,
 ): Record<string, string> {
   const env: Record<string, string> = {
-    ...buildPaperclipEnv(agent as never),
+    ...buildPaperclipEnv(agent),
     PAPERCLIP_RUN_ID: paperclipRunId,
     NO_COLOR: "1",
   };
