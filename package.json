@@ -1,0 +1,41 @@
+{
+  "name": "@paperclipai/adapter-freebuff",
+  "version": "0.1.0",
+  "description": "Paperclip external adapter for the freebuff CLI coding agent (freebuff.com) — spawns freebuff as a subprocess and streams its output back as a Paperclip transcript.",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "paperclip-adapter-freebuff": "dist/cli/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "REGISTRY_PATCHES.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test src/server/*.test.ts"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@paperclipai/adapter-utils": "^2026.824.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0"
+  },
+  "keywords": [
+    "paperclip",
+    "paperclipai",
+    "adapter",
+    "freebuff",
+    "codebuff",
+    "coding-agent"
+  ]
+}
