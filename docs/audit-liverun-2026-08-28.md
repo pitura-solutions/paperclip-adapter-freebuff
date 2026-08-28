@@ -329,3 +329,24 @@ Two questions before starting the rewrite:
 1. Greenlight Option B? Yes -> close FRE-9, open `FRE-11: tmux-driver v0.2.0`.
 2. Concurrency: one tmux session per Paperclip session (simpler) vs a
    session pool (faster resume, more state). Start with one-per-session.
+
+---
+
+## Final disposition (2026-08-28, 04:58 UTC) — FRE-9 closed `done`
+
+User accepted Option B on interaction `083f84ce-7a6a-40f1-ab2b-adf2d82823a1`:
+- **Greenlight Option B** (tmux driver) — `yes_ship_v020`.
+- **Concurrency:** one tmux session per Paperclip session — `one_per_paperclip_session`.
+
+**Outcome of FRE-9:**
+- This audit + the corrected decision are the reviewable work. Issue moves to `done`.
+- The 3-line "fail loudly" patch from earlier in the thread is **skipped** — going straight to v0.2.0 is cheaper now that tmux is greenlit.
+
+**Follow-up issue (NOT `FRE-11` — that identifier was already used by a different earlier issue, "Scan the project and tell me what's that", now done):**
+- **`FRE-14`: "ship paperclip-adapter-freebuff@0.2.0 — tmux-driver rewrite"** — auto-numbered child of FRE-9. Inherits the design + estimate + acceptance criteria from this doc.
+- Branch: cut `feat/v0.2.0-tmux-driver` from current `feat/v0.1.0-skeleton` (at `d39cc64`).
+- Track: `pitura-solutions/paperclip-adapter-freebuff` on GitHub.
+
+**Other children on the board (informational):**
+- `FRE-10` — "test it in a 5 simple projects" — `todo`. Blocked on a working `execute()`; will run after FRE-14 ships.
+- `FRE-13` — "Monitor freebuff upstream for --print" — `backlog`. Long-term simplification. Keep.
