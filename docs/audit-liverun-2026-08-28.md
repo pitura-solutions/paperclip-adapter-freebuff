@@ -249,3 +249,83 @@ adapter can produce a non-empty transcript from a real `execute()`
 call. The previous "doc-anchored review" confirmed the **shape** is
 right. This audit confirms the **runtime contract** is wrong for the
 host's installed freebuff version.
+
+---
+
+## Addendum (2026-08-28 04:39 UTC) — tmux driver is viable; Option B is the new primary path
+
+User pushback: "why not use tmux?" Re-tested on this host. Tmux-driving the TUI
+**works** end-to-end. Live transcript:
+
+```
+$ tmux new-session -d -s fb -x 200 -y 50 'PATH=/home/ubuntu/.npm-global/bin:$PATH freebuff'
+$ sleep 6
+$ tmux send-keys -t fb -l 'Reply with the single word PONG. No punctuation, no explanation.'
+$ sleep 1
+$ tmux send-keys -t fb Enter
+$ sleep 12
+$ tmux capture-pane -t fb -p -S -500 | grep -E 'PONG|Reply|thinking|You'
+  Reply with the single word PONG. No punctuation, no explanation. ⎘
+    The user wants me to reply with just "PONG" - a single word, no punctuation, no explanation.
+  PONG
+```
+
+Also confirmed: `freebuff --continue latest` reuses the prior conversation
+(sessions-used counter increments, indicating the prior turn was retrieved).
+
+### Why my earlier rejection of Option B was wrong
+
+The three concerns I cited (brittle TUI, private picker state, ad layout) are
+true in isolation but the conclusion was wrong:
+
+1. **Picker state is private — but moot.** The picker is pre-selected on
+   MiMo 2.5 in this region. We don't have to script selection; just hit
+   Enter. The single-model config in `index.ts` is already correct.
+2. **Ad layout changes — but decoupled.** The Clerk ad lives in its own
+   bordered box at the bottom of the pane. The transcript region above is
+   unaffected. Easy to ignore with a known row range.
+3. **TUI not designed for it — buttmux driving is the project's own
+   automation surface.** Codebuff's own integration tests
+   (`cli/src/__tests__/README.md`) spawn tmux sessions and drive them with
+   `send-keys`. This is how the upstream project tests its CLI.
+
+The freebuff issue #947 (community feature request that the same `--print`
+flag I assumed exists) explicitly proposes tmux-driving as Option C for
+third-party orchestrators. `claude-p` (a third-party Claude Code
+orchestrator) drives Claude Code's TUI through a PTY in production because
+it preserves the TUI request scaffold (no API parity drift vs `-p`).
+
+### Revised recommendation
+
+| Option | Was | Now |
+|---|---|---|
+| A. Wait for freebuff `--print` | Only viable path | Long-term simplification, tracked but not blocking |
+| **B. tmux-drive the TUI** | Rejected (brittle) | **The viable path. Ship as v0.2.0.** |
+| C. Wrap codebuff | Dead (no headless) | Dead (confirmed) |
+
+### Implementation outline (v0.2.0)
+
+```
+execute() {
+  session = tmux-open(sessionId)         // or reuse existing session
+  tmux-send-keys(session, prompt)         // -l for literal, then Enter
+  wait-for-completion(session, 120s)      // poll for `• Xs` / `△▽` marker
+  raw = tmux-capture-pane(session, -2000) // full scrollback
+  text = strip-ansi(raw)                  // remove ink escape codes
+  turn = parse-last-assistant-turn(text)  // skip ad region + user echoes
+  tmux-send-Esc(session)                  // optional: kill input buffer
+  return { transcript: turn, ... }
+}
+```
+
+Cost estimate: ~300 LOC + ~80 LOC tests + one `tmux` system dep.
+Comparable to what `claude-p` ships. 1-2 days of focused work. No upstream
+flag dependency.
+
+### Open question for the user
+
+Two questions before starting the rewrite:
+
+1. Greenlight Option B? Yes -> close FRE-9, open `FRE-11: tmux-driver v0.2.0`.
+2. Concurrency: one tmux session per Paperclip session (simpler) vs a
+   session pool (faster resume, more state). Start with one-per-session.
