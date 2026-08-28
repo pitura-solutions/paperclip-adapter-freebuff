@@ -22,5 +22,11 @@ export function createServerAdapter(): ServerAdapterModule {
   };
 }
 
-export const freebuffAdapter = createServerAdapter();
+// NOTE: do NOT eagerly export a pre-built instance here.
+// Creating it at module-evaluation time would invoke `createServerAdapter()`,
+// which reads `ADAPTER_TYPE` from `../index.js`. If the root re-exports
+// from this file, the cycle would hit a TDZ on `ADAPTER_TYPE` and throw.
+// The Paperclip install loader calls `createServerAdapter()` itself, so
+// we only need to export the factory.
+
 export { execute, testEnvironment, sessionCodec };
