@@ -74,30 +74,52 @@ async function checkCliInstalled(command: string): Promise<AdapterEnvironmentChe
   }
 }
 
-async function checkCliVersion(command: string): Promise<AdapterEnvironmentCheck> {
+async function checkCliVersion(command: string): Promise<AdapterEnvironmentCheck[]> {
   try {
     const { stdout } = await execFileAsync(command, ["--version"], {
       timeout: 10_000,
     });
     const version = stdout.trim();
     if (version) {
-      return {
-        level: "info",
-        code: "freebuff_version",
-        message: `freebuff version: ${version}`,
-      };
+      const checks: AdapterEnvironmentCheck[] = [
+        {
+          level: "info",
+          code: "freebuff_version",
+          message: `freebuff version: ${version}`,
+        },
+      ];
+      // Surface the real limitation: 0.0.15x has no non-interactive mode.
+      // Don't block the test (operator may still want to register the
+      // adapter), but make the UI honest about what execute() can do.
+      if (/^0\.0\.1\d+/.test(version)) {
+        checks.push({
+          level: "warn",
+          code: "freebuff_no_non_interactive_mode",
+          message:
+            "freebuff 0.0.15x is a TUI-only build with no --print/--output-format " +
+            "flag. execute() will fail until freebuff ships a pipe-friendly mode " +
+            "or you point `command` at a fork that has one.",
+          hint: "Set `command` to a wrapper binary that drives the TUI via PTY, " +
+            "or wait for a freebuff release that adds a non-interactive flag.",
+        });
+      }
+      return checks;
     }
-    return {
-      level: "warn",
-      code: "freebuff_version_unknown",
-      message: "Could not determine freebuff version",
-    };
+    return [
+      {
+        level: "warn",
+        code: "freebuff_version_unknown",
+        message: "Could not determine freebuff version",
+      },
+    ];
   } catch {
-    return {
-      level: "warn",
-      code: "freebuff_version_unknown",
-      message: "Could not determine freebuff version",
-    };
+    return [
+      {
+        level: "warn",
+        code: "freebuff_version_unknown",
+        message: "Could not determine freebuff version",
+      },
+    ];
   }
 }
 
@@ -163,7 +185,7 @@ export async function testEnvironment(
     return { adapterType: ADAPTER_TYPE, status: "fail", checks, testedAt };
   }
 
-  checks.push(await checkCliVersion(command));
+  checks.push(...(await checkCliVersion(command)));
   checks.push(await checkAuthenticated(command));
 
   const status = checks.some((c) => c.level === "error")
