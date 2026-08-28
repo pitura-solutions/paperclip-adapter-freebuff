@@ -12,12 +12,23 @@ const args = process.argv.slice(2);
 const cmd = args[0];
 
 switch (cmd) {
-  case "--version":
   case "version":
+  case "--version":
     console.log(`${ADAPTER_TYPE} ${ADAPTER_VERSION}`);
     break;
-  case "--help":
+  case "test-env": {
+    const { testEnvironment } = await import("../server/test.js");
+    const result = await testEnvironment({
+      companyId: "cli",
+      adapterType: ADAPTER_TYPE,
+      config: {},
+    });
+    console.log(JSON.stringify(result, null, 2));
+    process.exit(result.status === "pass" ? 0 : 1);
+    break;
+  }
   case "help":
+  case "--help":
   default:
     console.log(`@paperclipai/adapter-freebuff ${ADAPTER_VERSION}`);
     console.log("");
@@ -28,10 +39,4 @@ switch (cmd) {
     console.log("  paperclip-adapter-freebuff version");
     console.log("  paperclip-adapter-freebuff test-env   # check freebuff on PATH + auth");
     break;
-  case "test-env": {
-    const { testEnvironment } = await import("../server/test.js");
-    const diag = await testEnvironment({});
-    console.log(JSON.stringify(diag, null, 2));
-    process.exit(diag.ok ? 0 : 1);
-  }
 }

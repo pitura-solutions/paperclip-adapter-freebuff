@@ -12,7 +12,35 @@
 
 ## What This Does
 
-Spawns the `freebuff` CLI as a subprocess and streams its output into a Paperclip-compatible transcript. Freebuff is free, ad-supported, and model-locked (Deepseek v4 / MiMo 2.5 Pro / GLM 5.2 / Minimax M3 / Gemini 3.1 Flash Lite) — you don't bring a key, freebuff does.
+Spawns the `freebuff` CLI as a subprocess and streams its output into a Paperclip-compatible transcript. Freebuff is free, ad-supported, and model-locked (Deepseek v4 / MiMo 2.5 Pro / GLM 5.2 / MiniMax M3 / Gemini 3.1 Flash Lite) — you don't bring a key, freebuff does.
+
+### ⚠️ Current freebuff status (verified 2026-08-28)
+
+Every published `freebuff` version on npm (latest = `0.0.157`) is a **Bun-compiled
+TUI** with no `--print`, no `--output-format`, no `--model`, and no
+pipe-friendly mode. The CLI only accepts `login`, `--version`, `--help`,
+`--continue [id]`, and `--cwd <dir>`. A non-interactive spawn either errors
+with `unknown option '--print'` or rejects the positional prompt as
+`Allowed choices are login`.
+
+The adapter:
+
+- **Registers and the env test passes** — `freebuff_local` is installable.
+- **Cannot drive a real run end-to-end** — `execute()` will return
+  `exitCode: 1` against 0.0.15x until freebuff ships a non-interactive
+  flag, or the operator points `command` at a wrapper that drives the TUI
+  via a PTY.
+- **Reports the limitation honestly** — `testEnvironment()` now emits a
+  `freebuff_no_non_interactive_mode` warning when it detects 0.0.1xx.
+- **Is forward-compatible** — the stream-json parser in `parse-freebuff.ts`
+  is ready for the day freebuff ships a `--print` / `--output-format
+  stream-json` flag (or someone wraps the TUI). No code change needed
+  then.
+
+If you need a working adapter today, use Paperclip's built-in `claude_code`
+or `codex` adapters. This adapter is kept here as a forward-compatible
+integration; flip back to it the moment freebuff publishes a non-interactive
+mode.
 
 ### Adapter capabilities
 
@@ -121,7 +149,7 @@ packages/adapters/freebuff/
 ### How a run works
 
 1. Paperclip's heartbeat dispatcher wakes the agent and calls `execute(ctx)`
-2. Adapter reads `ctx.config` for: `command` (default `freebuff`), `args` (default `["--print", "--output-format", "stream-json"]`), `cwd`, `timeoutSec`, `model`
+2. Adapter reads `ctx.config` for: `command` (default `freebuff`), `args` (default `[]`), `cwd`, `timeoutSec`, `model`
 3. Adapter resolves `freebuff` on PATH; bails with a clear error if missing
 4. Adapter builds env: `PAPERCLIP_RUN_ID` + `PAPERCLIP_API_KEY` (from `ctx.authToken`) + freebuff-specific vars (`FREEBUFF_MODEL` if set, `NO_COLOR=1` for clean transcript)
 5. Adapter mints/resumes a freebuff session id (stored in `ctx.runtime.sessionParams.sessionId`); first run gets a fresh id, subsequent runs get `--continue <id>`
@@ -132,7 +160,9 @@ packages/adapters/freebuff/
 
 ### Freebuff output format
 
-Freebuff emits a stream of JSON lines when invoked with `--output-format stream-json`:
+The parser in `parse-freebuff.ts` accepts the stream-json shape that
+freebuff's docs describe (and that a future non-interactive mode would
+emit):
 
 ```json
 {"type":"init","session_id":"abc-123","model":"deepseek-v4"}
@@ -143,7 +173,10 @@ Freebuff emits a stream of JSON lines when invoked with `--output-format stream-
 {"type":"result","summary":"Edited src/index.ts","exit_code":0}
 ```
 
-Lines outside this format (freebuff ads, banner text, prompts) are detected by `parse-freebuff.ts` and dropped.
+Today, against 0.0.15x, freebuff never emits these lines (it draws a TUI
+on stdout instead). The parser is forward-compatible — the moment
+freebuff ships a `--print` mode that emits stream-json, this adapter
+lights up with no code change.
 
 ---
 
@@ -152,7 +185,7 @@ Lines outside this format (freebuff ads, banner text, prompts) are detected by `
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `command` | string | `"freebuff"` | Path to the freebuff binary; absolute or on PATH |
-| `args` | string[] | `["--print", "--output-format", "stream-json"]` | Args passed to freebuff |
+| `args` | string[] | `[]` | Args passed to freebuff. Defaults to empty because every published freebuff build (≤ 0.0.157) rejects `--print` / `--output-format` as unknown options. Set this if freebuff ships a non-interactive flag, or to e.g. `["--continue", "<id>"]` to resume. |
 | `cwd` | string | `process.cwd()` | Working directory for the subprocess |
 | `model` | string | `"auto"` | Freebuff model id; `auto` lets freebuff pick |
 | `timeoutSec` | number | `0` (no timeout) | Kill subprocess after N seconds |
